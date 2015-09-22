@@ -17,7 +17,7 @@ class cnxn(object):
     sql_budgetSpentPercent = """ select round(((mon_pur_amount)/beg_balance)*100,0) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
 
     def __init__(self):
-        self.conn = MySQLdb.connect(host='localhost', port=3306, user='root', passwd='Ppcppc1234', db='budget')
+        self.conn = MySQLdb.connect(host=host, port=port, user=user, passwd=pwd, db=db)
         self.cur = self.conn.cursor()
 
     def execute(self, query):
