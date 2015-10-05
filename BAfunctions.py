@@ -1,4 +1,4 @@
-import MySQLdb
+import pymysql as db
 import twilio.twiml
 import datetime
 import re
@@ -17,7 +17,7 @@ class cnxn(object):
     sql_budgetSpentPercent = """ select round(((mon_pur_amount)/beg_balance)*100,0) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
 
     def __init__(self):
-        self.conn = MySQLdb.connect(host=host, port=port, user=user, passwd=pwd, db=db)
+        self.conn = db.connect(host='babytito.milesw.net', port=3306, user='root', passwd='Ppcppc1234', db='budget')
         self.cur = self.conn.cursor()
 
     def execute(self, query):
@@ -151,7 +151,7 @@ def inputTransaction(body, from_, messageSID):
             budSpentPercent = cur.fetchone()
             budSpentPercent = ", ".join([str(int(x)) + '%' for x in budSpentPercent])
 
-            resultsLi.append({'budgetCategory': str(budgetCat).upper(), 'budgetBalance': budBalance, 'budgetTotal': int(float(budTotal)), 'budgetPercent': budBalPercent, 'budgetSpent': budSpent, 'budgetSpentPercent': budSpentPercent, 'amendNotification': amendNotification})
+            resultsLi.append({'budgetCategory': str(budgetCat).upper(), 'budgetBalance': budBalance, 'budgetTotal': '{0:.2f}'.format(float(budTotal)), 'budgetPercent': budBalPercent, 'budgetSpent': budSpent, 'budgetSpentPercent': budSpentPercent, 'amendNotification': amendNotification})
     if prob == None:
         respString = ''
         for i in resultsLi:
@@ -164,7 +164,7 @@ def inputTransaction(body, from_, messageSID):
     #respString = 'Got it! Thanks sweetie.'
     return respString
 
-#print inputTransaction("food 9.99 delete g's", 'testBarry', 'testAgain')
+print inputTransaction("barry .99 delete g's", 'testBarry', 'testAgain')
 
 def getBalance(budgetCat='all',body=None):
     cur = cnxn()
@@ -177,15 +177,15 @@ def getBalance(budgetCat='all',body=None):
         for x in budgetTotalAllLi:
             respString = respString + x['budgetName'] + ' - ' + '$' + str(x['budgetBalance']) + '\n'
         return respString
-    elif budgetCat != 'all' and budgetCat != 'multiple':
+    elif budgetCat not in ('all','multiple'):
         sql_singleBalance = """ select budget_name, round(end_or_cur_balance, 2) from budget.vw_balances where budget_name = '{0}' and date = (select max(date) from budget.vw_balances)  """
         cur.execute(sql_singleBalance.format(str(budgetCat).lower()))
         x = cur.getbal()
         respString = respString + x[0]['budgetName'] + ' - $' + str(x[0]['budgetBalance'])
         return respString
     else:
-        leftNum = len(str(body).lower()) - 17
-        rawList = str(body).lower()[-leftNum:]
+        leftNum = len(body) - 17
+        rawList = body[-leftNum:]
         chopitup = rawList.split(',')
         listLen = len(chopitup)
         multiBudget = ''
@@ -205,7 +205,7 @@ def getBalance(budgetCat='all',body=None):
 
 #print getBalance('multiple', 'food, gifts, pets')
 
-def getBudgetNames(keyword=None):
+def getBudgetNames(keyword=None, list=None):
     cur = cnxn()
     if keyword == None:
         sql = """ select budget_name from budget.dim_monthly_budgets
@@ -213,13 +213,25 @@ def getBudgetNames(keyword=None):
         cur.execute(sql)
         names = cur.fetchall()
         names = ", ".join([str(y) for x in names for y in x])
-        return names
+        if list == 'list':
+            li = []
+            for k in names.split(', '):
+                li.append(k)
+            return li
+        else:
+            return names
     elif keyword == 'all':
         sql = """ select budget_name from budget.dim_monthly_budgets  """
         cur.execute(sql)
         allNames = cur.fetchall()
         allNames = ", ".join([str(y) for x in allNames for y in x])
-        return allNames
+        if list == 'list':
+            li = []
+            for k in allNames.split(', '):
+                li.append(k)
+            return li
+        else:
+            return allNames
     elif keyword == 'fixed':
         sql = """ select budget_name from budget.dim_monthly_budgets
                     where fixed_budget_flag = 1 """
@@ -227,7 +239,12 @@ def getBudgetNames(keyword=None):
         fixedNames = cur.fetchall()
         fixedNames = ", ".join([str(y) for x in fixedNames for y in x])
         return fixedNames
+
 #print getBudgetNames()
+
+def getAllowances(body):
+    cur = cnxn()
+    #this is where i left off
 
 def userLastInput(body, from_):
     respString = ''
@@ -343,3 +360,34 @@ def transfer(body, from_, messageSID, dateCue=None):   #transfer 50 from food to
     return respString
 
 #print transfer('transfer 50 from food to house aug notes go here, transfer 15 from baby to gifts sep notes notes notes', 'test', 'test')
+
+def help(body):
+    if body in ('help please','what can i say','what can i ask'):
+        respString = 'You can enter a purchase, make an amendment (forgot to enter a purchase), get current balances, delete purchases, get prev purchases, or transfer $ to another budget.\n' \
+                     'Type help followed by 1 of the following keywords: purchase, amend, balance, delete, last purchases, budget names, or transfer. Ex: help balance'
+    elif re.search('help purchas(e|es)',body):
+        respString = 'To enter a purchase type the name of the budget, the amount and notes (if any) related to the purchase.\n ' \
+                     'Ex: food 12.36 McDonalds coke, gas 35.65.\n ' \
+                     'Separate purchases with a comma, do not use a comma within the same purchase.\n'
+    elif re.search('help(| budget) nam(e|es)', body):
+        respString = 'To get the names of the budgets, type "budget names" or simply ask "what are the budget names" without the quotes'
+    elif re.search('help amen(d|dment)',body):
+        respString = 'To amend (or add a purchase after the fact) type amend, budget name, amount, month (abbrev is fine)(type default for last month) and any notes.\n' \
+                     'Ex: amend misc 50 default I forgot to add this Dr Appt  -This will add a purchase of 50 to the misc budget applied to last month with the notes at the end.' \
+                     'You could also type amend misc 50 aug I forgot blah blah blah. Assuming august was last month, this will do the same thing.'
+    elif re.search('help(| get) balanc(e|es)', body):
+        respString = 'For all balances, type get all balances. To get a single balance simply type the name of the budget. To get multiple balances, type get balances for' \
+                     ' (list budget names here with commas).  Ex: get balances for food, barry, misc, house'
+    elif re.search('help(| get) (pre(v|vious)|last) (transactio(n|ns)|purchas(e|es)|recor(d|ds))',body):
+        respString = 'To get a list of the prev purchases you input, type get last (number) purchases.\n' \
+                     'Ex: get last 1 purchase or get last 5 transactions.'
+    elif re.search('help delete',body):
+        respString = 'To delete prev purchases you input, type delete last (number) purchases.\n' \
+                     'Ex: delete last 1 purchase or delete last 5 transactions.'
+    elif re.search('help transfe(r|rs)',body):
+        respString = 'To transfer $ from 1 budget to another follow this ex: transfer 25 from misc to house default needed more mulch.\n' \
+                     ' You can also use now, current or today instead of default to indicate the current month. Type out month name for previous months.'
+    else:
+        respString = "Not sure what you're asking. Try typing help please"
+    
+    return respString

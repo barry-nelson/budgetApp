@@ -13,38 +13,56 @@ app = Flask(__name__)
 
 def hello_monkey():
     body = request.values.get('Body', None)
-    from_ = request.values .get('From', None)
+    body = body.strip('$').strip('?')
+    from_ = request.values.get('From', None)
     from_ = from_.strip('+')
     messageSID = request.values.get('MessageSid', None)
+    bodyLi = ['amend','amendment']
+    for x in body.strip(',').split():
+        bodyLi.append(x)
 
-    if str(body).lower().strip('?') in ('get all balances', 'get all budget balances', 'all', 'get balances', 'get budget balances', 'how much is left in all budgets'):  #get budget balances for all budgets
+    #get budget balances for all budgets
+    if body in ('get all balances', 'get all budget balances', 'get balances', 'get budget balances', 'how much is left in all budgets'):
         respString = ba.getBalance()
-    elif ' ' not in body and str(body).lower() not in ('all'):  #single budget balance retrieval
-        respString = ba.getBalance(str(body).lower())
-    elif str(body).lower()[:16] == 'get balances for':
+
+    #single budget balance retrieval
+    elif ' ' not in body:
+        respString = ba.getBalance(body)
+
+    #input purchases
+    elif bodyLi[0] in ba.getBudgetNames(None,'list'):
+        respString = ba.inputTransaction(body, from_, messageSID)
+
+    #get balances for multiple budgets
+    elif body[:16] == 'get balances for':
         respString = ba.getBalance('multiple', body)
-    elif str(body).lower().strip('?') in ('what are the names', 'what are the budget names', 'budget names', 'budget names all', 'budget names fixed'):
-        if str(body).lower().strip('?') == 'budget names all':
+
+    #get a list of budget names, in case you forgot
+    elif body in ('what are the names', 'what are the budget names', 'budget names', 'budget names all', 'budget names fixed'):
+        if body == 'budget names all':
             respString = ba.getBudgetNames('all')
-        elif str(body).lower().strip('?') == 'budget names fixed':
+        elif body == 'budget names fixed':
             respString = ba.getBudgetNames('fixed')
         else:
             respString = ba.getBudgetNames()
-    elif str(body).lower() in ('help please', 'what can I say'):
-        respString = 'You can enter a purchase, make an amendment (forgot to enter a purchase), or get current balances.\n' \
-                     'Type help purchase or help amend or help balance or help budget names (if you forgot the exact name)'
-    elif str(body).lower() == 'help purchase':
-        respString = 'To enter a purchase type the name of the budget, the amount and notes (if any) related to the purchase.\n ' \
-                     'Ex: food 12.36 McDonalds coke, gas 35.65.\n ' \
-                     'Separate purchases with a comma, do not use a comma within the same purchase.\n'
-    elif str(body).lower() in ('help budget names', 'help names'):
-        respString = 'To get the names of the budgets, type "budget names" or simply ask "what are the budget names" without the quotes'
 
-    elif re.search('(get|delete) last (""|\d{1,2}) (transactio(n|ns)|purchas(e|es)|recor(d|ds))', str(body).lower()):
-        respString = ba.userLastInput(str(body).lower(), from_)
+    #help
+    elif 'help' in body:
+        respString = ba.help(body)
+
+    #get or delete recent transactions
+    elif re.search('(get|delete) last (""|\d{1,2}) (transactio(n|ns)|purchas(e|es)|recor(d|ds))', body):
+        respString = ba.userLastInput(body, from_)
+
+    #transfer money from 1 budget to another
+    elif 'transfer' in body:
+        respString = ba.transfer(body,from_,messageSID)
+
+    elif re.search('(allowance|total)', body):
+        respString = ba.getAllowances(body)
 
     else:
-        respString = ba.inputTransaction(body, from_, messageSID)
+        respString = 'Houston, we have a problem'
 
     resp = twilio.twiml.Response()
     resp.message(respString)
