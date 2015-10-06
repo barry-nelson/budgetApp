@@ -8,13 +8,13 @@ class cnxn(object):
                       values ({5}, '{0}', {1}, '{6}', '{2}', "{3}", '{4}');  """
     sql_budgetTotal = """ select round(beg_balance, 2) from budget.vw_balances where budget_name = '{0}'
                                   and date = {1}  """
-    sql_budgetBalance = """ select round(end_or_cur_balance, 2) from budget.vw_balances where budget_name = '{0}' and date = {1};  """
+    sql_budgetBalance = """ select end_or_cur_balance from budget.vw_balances where budget_name = '{0}' and date = {1};  """
 
-    sql_budgetSpent = """ select round(mon_pur_amount, 2) from budget.vw_balances where budget_name = '{0}' and date = {1};  """
+    sql_budgetSpent = """ select mon_pur_amount from budget.vw_balances where budget_name = '{0}' and date = {1};  """
 
-    sql_budgetBalancePercent = """ select round((end_or_cur_balance/beg_balance)*100,0) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
+    sql_budgetBalancePercent = """ select round(((end_or_cur_balance*100)/(beg_balance*100))*100) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
 
-    sql_budgetSpentPercent = """ select round(((mon_pur_amount)/beg_balance)*100,0) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
+    sql_budgetSpentPercent = """ select round(((mon_pur_amount*100)/(beg_balance*100))*100) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
 
     def __init__(self):
         self.conn = db.connect(host='babytito.milesw.net', port=3306, user='root', passwd='Ppcppc1234', db='budget')
@@ -36,6 +36,12 @@ class cnxn(object):
         li = []
         for (budgetName, budgetAmount) in self.cur:
            li.append({'budgetName': budgetName, 'budgetBalance': budgetAmount})
+        return li
+
+    def getbalTotal(self):
+        li = []
+        for (begBalTotal, curBalTotal, percBalTotal) in self.cur:
+           li.append({'begBalTotal': begBalTotal, 'curBalTotal': curBalTotal, 'percBalTotal': percBalTotal})
         return li
 
     def month_perc_left(self):
@@ -164,21 +170,30 @@ def inputTransaction(body, from_, messageSID):
     #respString = 'Got it! Thanks sweetie.'
     return respString
 
-print inputTransaction("barry .99 delete g's", 'testBarry', 'testAgain')
+#print inputTransaction("barry .99 delete g's", 'testBarry', 'testAgain')
 
 def getBalance(budgetCat='all',body=None):
     cur = cnxn()
     respString = ''
     if budgetCat == 'all':
-        sql_budgetTotalAll = """ select a.budget_name, round(end_or_cur_balance, 2) from budget.vw_balances a join budget.dim_monthly_budgets b
+        sql_budgetTotalAll = """ select a.budget_name, end_or_cur_balance from budget.vw_balances a join budget.dim_monthly_budgets b
                                    on a.budget_name = b.budget_name where b.fixed_budget_flag = 0 and a.date = (select max(date) from budget.vw_balances) """
         cur.execute(sql_budgetTotalAll)
         budgetTotalAllLi = cur.getbal()
         for x in budgetTotalAllLi:
             respString = respString + x['budgetName'] + ' - ' + '$' + str(x['budgetBalance']) + '\n'
         return respString
+    if budgetCat == 'total':
+        sql_budgetTotalTotal = """ select sum(beg_balance), sum(end_or_cur_balance), round(((sum(end_or_cur_balance)*100)/(sum(beg_balance)*100))*100)
+                                    from budget.vw_balances a join budget.dim_monthly_budgets b on a.budget_name = b.budget_name
+                                    where b.fixed_budget_flag = 0 and a.date = (select max(date) from budget.vw_balances) """
+        cur.execute(sql_budgetTotalTotal)
+        budgetTotalTotalLi = cur.getbalTotal()
+        for x in budgetTotalTotalLi:
+            respString = 'Beg balance - $' + str(x['begBalTotal']) + '\n' + "Current balance - $" + str(x['curBalTotal']) + '\n' + "Budget left - " + str(x['percBalTotal']) + '%'
+        return respString
     elif budgetCat not in ('all','multiple'):
-        sql_singleBalance = """ select budget_name, round(end_or_cur_balance, 2) from budget.vw_balances where budget_name = '{0}' and date = (select max(date) from budget.vw_balances)  """
+        sql_singleBalance = """ select budget_name, end_or_cur_balance from budget.vw_balances where budget_name = '{0}' and date = (select max(date) from budget.vw_balances)  """
         cur.execute(sql_singleBalance.format(str(budgetCat).lower()))
         x = cur.getbal()
         respString = respString + x[0]['budgetName'] + ' - $' + str(x[0]['budgetBalance'])
@@ -196,14 +211,14 @@ def getBalance(budgetCat='all',body=None):
                 counter += 1
             else:
                 multiBudget = multiBudget + "'" + x.strip() + "'"
-        sql_multiple = """ select budget_name, round(end_or_cur_balance, 2) from budget.vw_balances where budget_name in ({0}) and date = (select max(date) from budget.vw_balances)  """
+        sql_multiple = """ select budget_name, end_or_cur_balance from budget.vw_balances where budget_name in ({0}) and date = (select max(date) from budget.vw_balances)  """
         cur.execute(sql_multiple.format(multiBudget))
         multipleLi = cur.getbal()
         for x in multipleLi:
             respString = respString + x['budgetName'] + ' - ' + '$' + str(x['budgetBalance']) + '\n'
         return respString
 
-#print getBalance('multiple', 'food, gifts, pets')
+print getBalance('total', 'get total balance')
 
 def getBudgetNames(keyword=None, list=None):
     cur = cnxn()
