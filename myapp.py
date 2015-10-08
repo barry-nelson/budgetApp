@@ -65,6 +65,7 @@ def hello_monkey():
     elif 'transfer' in body:
         respString = ba.transfer(body,from_,messageSID)
 
+    #get budget totals
     elif re.search('(allowance|budget total)', body):
         respString = ba.getAllowances(body)
 

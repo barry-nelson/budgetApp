@@ -2,6 +2,8 @@ import pymysql as db
 import twilio.twiml
 import datetime
 import re
+import BAsecrets as key
+import pytz
 
 class cnxn(object):
     sql_purchase = """ insert into budget.purchase (date, Budget_Name, amount, type, user, notes, message_sid)
@@ -17,7 +19,7 @@ class cnxn(object):
     sql_budgetSpentPercent = """ select round(((mon_pur_amount*100)/(beg_balance*100))*100) from budget.vw_balances where budget_name = '{0}' and date = {1}; """
 
     def __init__(self):
-        self.conn = db.connect(host='babytito.milesw.net', port=3306, user='root', passwd='Ppcppc1234', db='budget')
+        self.conn = db.connect(host=key.host, port=key.port, user=key.user, passwd=key.pwd, db=key.db)
         self.cur = self.conn.cursor()
 
     def execute(self, query):
@@ -63,6 +65,11 @@ class cnxn(object):
     def __del__(self):
         self.conn.close()
 
+abrevMonLi = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']
+fullMonLi = ['january','february','march','april','may','june','july','august','september','october','november','december']
+curMonthNum = int(datetime.datetime.now(pytz.timezone('US/Mountain')).strftime('%m'))
+curYear = int(datetime.datetime.now(pytz.timezone('US/Mountain')).strftime('%Y'))
+
 def monthLookUp(mon):
     if mon == 'jan': num = '01'
     elif mon == 'feb': num = '02'
@@ -85,6 +92,36 @@ def monthLookUp(mon):
     return dateStr
 #print monthLookUp('jan')
 
+def monthLookUp2(mon):
+    if mon == 'jan': num = '01'
+    elif mon == 'feb': num = '02'
+    elif mon == 'mar': num = '03'
+    elif mon == 'apr': num = '04'
+    elif mon == 'may': num = '05'
+    elif mon == 'jun': num = '06'
+    elif mon == 'jul': num = '07'
+    elif mon == 'aug': num = '08'
+    elif mon == 'sep': num = '09'
+    elif mon == 'oct': num = '10'
+    elif mon == 'nov': num = '11'
+    elif mon == 'dec': num = '12'
+    return num
+
+def monthNumLookUp2(num):
+    if num == '01': mon = 'jan'
+    elif mon == 'feb': num = '02'
+    elif mon == 'mar': num = '03'
+    elif mon == 'apr': num = '04'
+    elif mon == 'may': num = '05'
+    elif mon == 'jun': num = '06'
+    elif mon == 'jul': num = '07'
+    elif mon == 'aug': num = '08'
+    elif mon == 'sep': num = '09'
+    elif mon == 'oct': num = '10'
+    elif mon == 'nov': num = '11'
+    elif mon == 'dec': num = '12'
+    return mon
+
 def inputTransaction(body, from_, messageSID):
     chopitup = body.split(',')
     resultsLi = []
@@ -102,7 +139,7 @@ def inputTransaction(body, from_, messageSID):
             dateCue = inputVar[3].lower()
             if dateCue == 'default':
                 transDate = 'cast(last_day(now() - interval 1 month) as datetime)'
-            elif dateCue[:3] in ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'):
+            elif dateCue[:3] in abrevMonLi:
                 mon_ = dateCue[:3]
                 transDate = monthLookUp(mon_)
             else:
@@ -218,7 +255,7 @@ def getBalance(budgetCat='all',body=None):
             respString = respString + x['budgetName'] + ' - ' + '$' + str(x['budgetBalance']) + '\n'
         return respString
 
-print getBalance('total', 'get total balance')
+#print getBalance('total', 'get total balance')
 
 def getBudgetNames(keyword=None, list=None):
     cur = cnxn()
@@ -227,11 +264,9 @@ def getBudgetNames(keyword=None, list=None):
                     where fixed_budget_flag = 0 """
         cur.execute(sql)
         names = cur.fetchall()
-        names = ", ".join([str(y) for x in names for y in x])
+        names = ", ".join([str(y).lower() for x in names for y in x])
         if list == 'list':
-            li = []
-            for k in names.split(', '):
-                li.append(k)
+            li = names.split(', ')
             return li
         else:
             return names
@@ -239,11 +274,9 @@ def getBudgetNames(keyword=None, list=None):
         sql = """ select budget_name from budget.dim_monthly_budgets  """
         cur.execute(sql)
         allNames = cur.fetchall()
-        allNames = ", ".join([str(y) for x in allNames for y in x])
+        allNames = ", ".join([str(y).lower() for x in allNames for y in x])
         if list == 'list':
-            li = []
-            for k in allNames.split(', '):
-                li.append(k)
+            li = allNames.split(', ')
             return li
         else:
             return allNames
@@ -252,14 +285,113 @@ def getBudgetNames(keyword=None, list=None):
                     where fixed_budget_flag = 1 """
         cur.execute(sql)
         fixedNames = cur.fetchall()
-        fixedNames = ", ".join([str(y) for x in fixedNames for y in x])
+        fixedNames = ", ".join([str(y).lower() for x in fixedNames for y in x])
         return fixedNames
 
-#print getBudgetNames()
+#print getBudgetNames('all','list')
 
-def getAllowances(body):
+def whereDateIn(monList):
+    sqlInStr = ''
+    liLen = len(monList)
+    cntr = 1
+    for x in monList:
+        if cntr != liLen:
+            sqlInStr = sqlInStr + "'{0}-{1}-01 00:00:00',".format(str(curYear), x)
+        else:
+            sqlInStr = sqlInStr + "'{0}-{1}-01 00:00:00'".format(str(curYear), x)
+        cntr += 1
+    return sqlInStr
+
+def whereBudgetNameIn(budgetNameLi):
+    sqlInStr = ''
+    liLen = len(budgetNameLi)
+    cntr = 1
+    for x in budgetNameLi:
+        if cntr != liLen:
+            sqlInStr = sqlInStr + "'{0}',".format(x)
+        else:
+            sqlInStr = sqlInStr + "'{0}'".format(x)
+        cntr += 1
+    sqlInStr = 'and a.budget_name in (' + sqlInStr + ')'
+    return sqlInStr
+#print whereBudgetNameIn(['food','naomi','house'])
+
+def monthExtract(body):
+    monLi = []
+    for x in abrevMonLi:
+        if x in body:
+            monLi.append(x)
+    return monLi
+#print monthExtract('something mar, may and feb blah for aurg')
+
+def budgetNameExtract(body):
+    bodyWordLi = body.replace(',','').lower().split()
+    budgetNames = list(set(bodyWordLi).intersection(getBudgetNames('all','list')))
+    return budgetNames
+#print budgetNameExtract('blah something food, medical, poop')
+
+def getAllowances(body):  #### For more than 1 budget, only 1 month. For 1 budget, max 6 months.
     cur = cnxn()
-    #this is where i left off
+    monNumLi = []
+    sql = """ select {3}, amount from budget.monthly_budgets_history a
+                             left join budget.dim_monthly_budgets b on a.budget_name = b.budget_name
+                             where date in ({0}) and b.fixed_budget_flag = {1} {2} order by {4}; """
+
+#---Date range  ---------------------------------------------------------------------------------------------
+    if re.search('this month', body):
+        monNumLi.append(str(curMonthNum).zfill(2))
+        monNameLi = ['this month']
+    elif re.search('last month', body):
+        monNumLi.append(str(curMonthNum-1).zfill(2))
+        monNameLi = ['last month']
+    elif len(monthExtract(body)) == 1:
+        monNameLi = monthExtract(body)
+        monNumLi.append(monthLookUp2(monNameLi[0]))
+    elif len(monthExtract(body)) > 1:
+        monNameLi = monthExtract(body)
+        [monNumLi.append(monthLookUp2(x)) for x in monNameLi]
+    else:
+        monNumLi.append(str(curMonthNum).zfill(2))
+        monNameLi = ['this month']
+
+#---Is it a fixed budget?  ------------------------------------------------------------------------------------
+    if 'fixed' in body:
+        fixedFlag = 1
+    else:
+        fixedFlag = 0
+
+#---Which budgets?  -------------------------------------------------------------------------------------------
+    if re.search('(get |)(all | |)(budget total|allowance)', body) and len(monthExtract(body)) < 2:
+        whichBudgets = ''
+        respLi = monNameLi
+        field = 'a.budget_name'
+        orderBy = field
+    elif len(budgetNameExtract(body)) > 1 and len(monthExtract(body)) < 2:
+        whichBudgets = whereBudgetNameIn(budgetNameExtract(body))
+        respLi = monNameLi
+        field = 'a.budget_name'
+        orderBy = field
+    elif len(budgetNameExtract(body)) == 1 and len(monthExtract(body)) < 13:
+        whichBudgets = whereBudgetNameIn(budgetNameExtract(body))
+        respLi = budgetNameExtract(body)
+        field = "date_format(date, '%b')"
+        orderBy = 'date desc'
+    else:
+        respString = "Sorry, can't do it, try again. Only 1 budget for multiple months and 1 month for multiple budgets."
+        return respString
+
+    dateVar = whereDateIn(monNumLi)
+    cur.execute(sql.format(dateVar, fixedFlag, whichBudgets, field, orderBy))
+    results = cur.fetchall()
+    for x in respLi:
+        respString = 'Budget totals for {0}\n'.format(x.capitalize()) + '\n'.join(budgetName + ' - $' + str(amount) for budgetName, amount in results)
+
+    return respString
+
+#print getAllowances('get food and barry totals for oct, sept and aug')
+    #this is where i left off   --need to add logic for other months besides this and last month including whether that mon is this year or last (think Jan)
+    #--also need to add support for specific budgets only
+    #--also, multi-month support for single budgets
 
 def userLastInput(body, from_):
     respString = ''
@@ -278,14 +410,18 @@ def userLastInput(body, from_):
         respString = respString + x['budgetName'] + ' ' + str(x['budgetAmount']) + ' ' + str(x['budgetDate']) + ' ' + x['budgetNotes'] + '\n'
 
     if inputSplit[0] == 'delete':
+        sql_delete_write = """ insert into budget.delete select * from budget.purchase where user = '{0}' order by id desc LIMIT {1}  """
         sql_delete = """ delete from budget.purchase where user = '{0}' order by id desc LIMIT {1}  """
         cur = cnxn()
+        cur.execute(sql_delete_write.format(str(from_), numOfTransactions))
         cur.execute(sql_delete.format(str(from_), numOfTransactions))
         cur.commit()
+
         respString = '[DELETED]- ' + respString
 
     return respString
-#print userLastInput('get last 2 transactions', '13852527411')
+#inputTransaction('barry .98 delete, barry .97 delete','test','delete')
+#userLastInput('delete last 2 transactions', 'test')
 
 def transfer(body, from_, messageSID, dateCue=None):   #transfer 50 from food to house aug notes go here
     sql_transfer1 = """ insert into budget.purchase (date, Budget_Name, amount, type, user, notes, message_sid)
@@ -317,7 +453,7 @@ def transfer(body, from_, messageSID, dateCue=None):   #transfer 50 from food to
 
         if dateCue in ('default', 'current', 'now', 'today'):
             transDate = 'now()'
-        elif dateCue[:3] in ('jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'):
+        elif dateCue[:3] in abrevMonLi:
             mon_ = dateCue[:3]
             transDate = monthLookUp(mon_)
 
@@ -402,6 +538,9 @@ def help(body):
     elif re.search('help transfe(r|rs)',body):
         respString = 'To transfer $ from 1 budget to another follow this ex: transfer 25 from misc to house default needed more mulch.\n' \
                      ' You can also use now, current or today instead of default to indicate the current month. Type out month name for previous months.'
+    elif re.search('help (allowance|budget total)', body):
+        respString = 'To get the amounts allotted for budgets, include allowance or budget total in your text, including which budgets and which months.\n' \
+                     'Ex: get all budget totals for this month or get food, house and misc for last month or get food budget totals for oct and sept.'
     else:
         respString = "Not sure what you're asking. Try typing help please"
     
