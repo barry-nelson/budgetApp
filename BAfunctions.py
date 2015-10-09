@@ -107,21 +107,6 @@ def monthLookUp2(mon):
     elif mon == 'dec': num = '12'
     return num
 
-def monthNumLookUp2(num):
-    if num == '01': mon = 'jan'
-    elif mon == 'feb': num = '02'
-    elif mon == 'mar': num = '03'
-    elif mon == 'apr': num = '04'
-    elif mon == 'may': num = '05'
-    elif mon == 'jun': num = '06'
-    elif mon == 'jul': num = '07'
-    elif mon == 'aug': num = '08'
-    elif mon == 'sep': num = '09'
-    elif mon == 'oct': num = '10'
-    elif mon == 'nov': num = '11'
-    elif mon == 'dec': num = '12'
-    return mon
-
 def inputTransaction(body, from_, messageSID):
     chopitup = body.split(',')
     resultsLi = []
